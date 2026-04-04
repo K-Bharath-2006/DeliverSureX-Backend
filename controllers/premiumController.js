@@ -70,7 +70,9 @@ exports.calculateLivePremium = async (req, res) => {
     const hasTomTomKey =
       process.env.TOMTOM_API_KEY &&
       process.env.TOMTOM_API_KEY !== "your_tom_tom_api_key_here";
-
+    console.log("TomTom Key:", process.env.TOMTOM_API_KEY);
+    console.log(hasTomTomKey);
+    
     if (hasTomTomKey) {
       try {
         const trafficData = await fetchTraffic(lat, lon);
