@@ -1,5 +1,6 @@
 const apiClient = require("../utils/apiClient");
 
+// 🌧 Rain Status
 const getRainStatus = (rainfall) => {
   if (rainfall === 0) return "No Rain";
   if (rainfall <= 2.5) return "Light Rain";
@@ -7,6 +8,7 @@ const getRainStatus = (rainfall) => {
   return "Heavy Rain";
 };
 
+// 🌦 Weather Condition
 const getWeatherCondition = (code) => {
   if (code === 0) return "Clear Sky ☀️";
   if ([1, 2, 3].includes(code)) return "Partly Cloudy ☁️";
@@ -22,6 +24,8 @@ const getWeatherData = async (lat, lon, duration = 1) => {
   try {
     const url = "https://api.open-meteo.com/v1/forecast";
 
+    console.log("🌍 Calling Weather API:", { lat, lon });
+
     const response = await apiClient.get(url, {
       params: {
         latitude: lat,
@@ -30,48 +34,50 @@ const getWeatherData = async (lat, lon, duration = 1) => {
         hourly: "rain",
         timezone: "auto",
       },
+      timeout: 5000, // ⏱ prevent hanging
     });
 
     const data = response.data;
 
-    // ❌ Validate API response
+    console.log("✅ Weather API Response received");
+
+    // ✅ SAFE VALIDATION (NO THROW)
     if (!data || !data.current_weather) {
-      throw new Error("Invalid weather data received");
+      console.warn("⚠ Invalid weather response, using fallback");
+
+      return {
+        rainfall_mm: 0,
+        rain_status: "fallback",
+        weather_condition: "unknown",
+        temperature: 0,
+        is_raining: false,
+      };
     }
 
     const current = data.current_weather;
-    let rainfall = data.hourly?.rain?.[0] || 0; // fallback if hourly is empty
+
+    let rainfall = data?.hourly?.rain?.[0] || 0;
     let isRaining = rainfall > 0;
 
-    // Check historical duration
-    if (data.hourly && data.hourly.time && data.hourly.rain) {
-        const currentTimeString = current.time;
-        const currentIndex = data.hourly.time.indexOf(currentTimeString);
-        
-        if (currentIndex !== -1) {
-            // Check past 'duration' hours
-            const startIndex = Math.max(0, currentIndex - duration + 1);
-            let maxRainfallInWindow = 0;
-            
-            for (let i = startIndex; i <= currentIndex; i++) {
-                const hourlyRain = data.hourly.rain[i];
-                if (hourlyRain > maxRainfallInWindow) {
-                    maxRainfallInWindow = hourlyRain;
-                }
-            }
-            
-            rainfall = maxRainfallInWindow;
-            isRaining = maxRainfallInWindow > 0;
+    // 🧠 Historical Rain Check
+    if (data.hourly?.time && data.hourly?.rain) {
+      const currentIndex = data.hourly.time.indexOf(current.time);
+
+      if (currentIndex !== -1) {
+        const startIndex = Math.max(0, currentIndex - duration + 1);
+
+        let maxRain = 0;
+        for (let i = startIndex; i <= currentIndex; i++) {
+          if (data.hourly.rain[i] > maxRain) {
+            maxRain = data.hourly.rain[i];
+          }
         }
+
+        rainfall = maxRain;
+        isRaining = maxRain > 0;
+      }
     }
 
-    // 🌧 Rain logic
-    const rainStatus = getRainStatus(rainfall);
-
-    // 🌦 Weather condition
-    const weatherCondition = getWeatherCondition(current.weathercode);
-
-    // ✅ Final structured response
     return {
       location: {
         lat: data.latitude,
@@ -80,16 +86,30 @@ const getWeatherData = async (lat, lon, duration = 1) => {
       temperature: current.temperature,
       windspeed: current.windspeed,
       rainfall_mm: rainfall,
-      rain_status: rainStatus,
+      rain_status: getRainStatus(rainfall),
       is_raining: isRaining,
       weather_code: current.weathercode,
-      weather_condition: weatherCondition,
+      weather_condition: getWeatherCondition(current.weathercode),
       timestamp: current.time,
     };
 
   } catch (error) {
-    console.error("Weather Service Error:", error.message);
-    throw new Error("Failed to fetch weather data");
+    // 🔍 FULL ERROR DEBUG (IMPORTANT)
+    console.error("❌ FULL WEATHER ERROR:", {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data,
+      url: error.config?.url,
+    });
+
+    // ✅ NEVER CRASH → RETURN FALLBACK
+    return {
+      rainfall_mm: 0,
+      rain_status: "fallback",
+      weather_condition: "unknown",
+      temperature: 0,
+      is_raining: false,
+    };
   }
 };
 
