@@ -22,49 +22,92 @@ exports.calculateLivePremium = async (req, res) => {
   try {
     const { lat, lon } = req.body;
 
-    if (!lat || !lon) {
-      return res.status(400).json({ success: false, message: "Latitude and longitude are required." });
+    // ✅ Proper validation
+    if (lat === undefined || lon === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "Latitude and longitude are required."
+      });
     }
 
-    // Fetch real-time data from all 3 APIs in parallel
-    const [weather, aqiData] = await Promise.all([
-      getWeatherData(lat, lon, 1),
-      getAirQualityData(lat, lon, 1),
-    ]);
+    // ✅ SAFE FETCH (no crash even if API fails)
+    let weather = {};
+    let aqiData = {};
 
-    // Extract the key indicators
-    const rainfall = weather.rainfall_mm || 0;
-    const aqi = aqiData.aqi || 0;
+    try {
+      weather = await getWeatherData(lat, lon, 1);
+    } catch (err) {
+      console.warn("Weather failed:", err.message);
 
-    // Traffic: TomTom is optional (requires API key). Fallback to 0 if not available.
+      // ✅ Fallback
+      weather = {
+        rainfall_mm: 0,
+        rain_status: "unavailable",
+        weather_condition: "unknown",
+        temperature: 0
+      };
+    }
+
+    try {
+      aqiData = await getAirQualityData(lat, lon, 1);
+    } catch (err) {
+      console.warn("AQI failed:", err.message);
+
+      // ✅ Fallback
+      aqiData = {
+        aqi: 0,
+        aqi_status: "unavailable"
+      };
+    }
+
+    // ✅ Safe extraction
+    let rainfall = Number(weather?.rainfall_mm) || 0;
+    let aqi = Number(aqiData?.aqi) || 0;
+
+    // 🚗 Traffic (optional)
     let trafficCongestion = 0;
-    const hasTomTomKey = process.env.TOMTOM_API_KEY && process.env.TOMTOM_API_KEY !== 'aH6ogv9NI6pRGBO3aiXG0czKhccT50Ev';
+
+    const hasTomTomKey =
+      process.env.TOMTOM_API_KEY &&
+      process.env.TOMTOM_API_KEY !== "your_tom_tom_api_key_here";
+
     if (hasTomTomKey) {
       try {
         const trafficData = await fetchTraffic(lat, lon);
-        // Convert ratio to congestion %, ratio=1 means free flow (0% congestion), ratio=0 means fully blocked (100%)
         trafficCongestion = Math.round((1 - trafficData.ratio) * 100);
       } catch (trafficErr) {
-        console.warn("Traffic fetch failed, defaulting to 0:", trafficErr.message);
+        console.warn("Traffic failed:", trafficErr.message);
       }
     }
 
-    const premiumData = calculateRiskAndPremium({ rainfall, aqi, traffic: trafficCongestion });
+    // ✅ FINAL CALCULATION
+    const premiumData = calculateRiskAndPremium({
+      rainfall,
+      aqi,
+      traffic: trafficCongestion
+    });
 
+    // ✅ RESPONSE
     res.json({
+      success: true,
       ...premiumData,
       env: {
         rainfall_mm: rainfall,
-        rain_status: weather.rain_status,
-        weather_condition: weather.weather_condition,
-        temperature: weather.temperature,
+        rain_status: weather?.rain_status || "unknown",
+        weather_condition: weather?.weather_condition || "unknown",
+        temperature: weather?.temperature || 0,
         aqi: aqi,
-        aqi_status: aqiData.aqi_status,
-        traffic_congestion: trafficCongestion,
+        aqi_status: aqiData?.aqi_status || "unknown",
+        traffic_congestion: trafficCongestion
       }
     });
+
   } catch (err) {
-    console.error("Live Premium Error:", err.message);
-    res.status(500).json({ success: false, error: err.message });
+    console.error("Live Premium Error:", err);
+
+    res.status(500).json({
+      success: false,
+      error: "Internal server error"
+    });
   }
 };
