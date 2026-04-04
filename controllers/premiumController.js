@@ -38,7 +38,7 @@ exports.calculateLivePremium = async (req, res) => {
 
     // Traffic: TomTom is optional (requires API key). Fallback to 0 if not available.
     let trafficCongestion = 0;
-    const hasTomTomKey = process.env.TOMTOM_API_KEY && process.env.TOMTOM_API_KEY !== 'your_tom_tom_api_key_here';
+    const hasTomTomKey = process.env.TOMTOM_API_KEY && process.env.TOMTOM_API_KEY !== 'aH6ogv9NI6pRGBO3aiXG0czKhccT50Ev';
     if (hasTomTomKey) {
       try {
         const trafficData = await fetchTraffic(lat, lon);
