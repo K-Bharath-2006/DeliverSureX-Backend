@@ -1,42 +1,69 @@
-const axios = require("axios");
+const apiClient = require("../utils/apiClient");
 const { TOMTOM_API_KEY } = require("../config/config");
 
 const fetchTraffic = async (lat, lon) => {
   try {
-    const url = `https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json?point=${lat},${lon}&key=${TOMTOM_API_KEY}`;
-
     console.log("🚗 Calling Traffic API:", { lat, lon });
 
-    const response = await axios.get(url);
+    const response = await apiClient.get(
+      "https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json",
+      {
+        params: {
+          point: `${lat},${lon}`,
+          key: TOMTOM_API_KEY,
+        },
+      }
+    );
+
+    console.log("✅ Traffic API response received");
 
     const data = response.data?.flowSegmentData;
 
-    // ❗ SAFETY CHECK
-    if (!data || !data.currentSpeed || !data.freeFlowSpeed) {
-      console.warn("⚠ No valid traffic data");
+    // 🔍 Debug full response if needed
+    if (!data) {
+      console.warn("⚠ No flowSegmentData:", response.data);
+    }
+
+    // ❗ Safety check
+    if (!data || data.currentSpeed == null || data.freeFlowSpeed == null) {
+      console.warn("⚠ Invalid traffic data → using fallback");
 
       return {
-        ratio: 0.5, // simulate moderate traffic
-        traffic: "Estimated Traffic ⚠️"
+        ratio: 0.5,
+        traffic: "Estimated Traffic ⚠️",
+        traffic_congestion: 50,
       };
     }
 
     const currentSpeed = data.currentSpeed;
     const freeFlowSpeed = data.freeFlowSpeed;
 
-    // ❗ Avoid division issues
+    // ❗ Avoid division by zero
     if (freeFlowSpeed === 0) {
-      console.warn("⚠ Invalid freeFlowSpeed");
+      console.warn("⚠ freeFlowSpeed is 0 → fallback");
 
       return {
         ratio: 0.5,
-        traffic: "Estimated Traffic ⚠️"
+        traffic: "Estimated Traffic ⚠️",
+        traffic_congestion: 50,
       };
     }
 
     const ratio = currentSpeed / freeFlowSpeed;
 
+    // ❗ Handle NaN case
+    if (isNaN(ratio)) {
+      console.warn("⚠ Ratio is NaN → fallback");
+
+      return {
+        ratio: 0.5,
+        traffic: "Estimated Traffic ⚠️",
+        traffic_congestion: 50,
+      };
+    }
+
     let trafficStatus = "";
+    let congestion = Math.round((1 - ratio) * 100);
 
     if (ratio > 0.8) {
       trafficStatus = "Smooth Traffic ✅";
@@ -54,16 +81,24 @@ const fetchTraffic = async (lat, lon) => {
       confidence: data.confidence,
       roadClosure: data.roadClosure,
       traffic: trafficStatus,
-      ratio: ratio
+      ratio: ratio,
+      traffic_congestion: congestion,
     };
 
   } catch (err) {
-    console.error("❌ Traffic API Error:", err.response?.data || err.message);
+    console.error("❌ Traffic API Error:", {
+      message: err.message,
+      status: err.response?.status,
+      data: err.response?.data,
+    });
 
-    // 🔥 FALLBACK
+    // 🔥 Smart fallback (random realistic value)
+    const fallbackRatio = 0.4 + Math.random() * 0.3;
+
     return {
-      ratio: 0.5,
-      traffic: "Fallback Traffic"
+      ratio: fallbackRatio,
+      traffic: "Fallback Traffic ⚠️",
+      traffic_congestion: Math.round((1 - fallbackRatio) * 100),
     };
   }
 };
