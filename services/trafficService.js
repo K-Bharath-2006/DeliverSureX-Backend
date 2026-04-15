@@ -35,6 +35,8 @@ const fetchTraffic = async (lat, lon) => {
       };
     }
 
+    console.log(data);
+    
     const currentSpeed = data.currentSpeed;
     const freeFlowSpeed = data.freeFlowSpeed;
 
