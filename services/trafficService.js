@@ -3,8 +3,6 @@ const { TOMTOM_API_KEY } = require("../config/config");
 
 const fetchTraffic = async (lat, lon) => {
   try {
-    console.log("🚗 Calling Traffic API:", { lat, lon });
-
     const response = await apiClient.get(
       "https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json",
       {
@@ -14,8 +12,6 @@ const fetchTraffic = async (lat, lon) => {
         },
       }
     );
-
-    console.log("✅ Traffic API response received");
 
     const data = response.data?.flowSegmentData;
 
@@ -34,8 +30,6 @@ const fetchTraffic = async (lat, lon) => {
         traffic_congestion: 50,
       };
     }
-
-    console.log(data);
     
     const currentSpeed = data.currentSpeed;
     const freeFlowSpeed = data.freeFlowSpeed;
@@ -75,6 +69,8 @@ const fetchTraffic = async (lat, lon) => {
       trafficStatus = "Heavy Traffic 🚦";
     }
 
+    console.log(trafficStatus);
+    
     return {
       latitude: lat,
       longitude: lon,
